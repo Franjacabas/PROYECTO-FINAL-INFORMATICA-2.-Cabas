@@ -7,6 +7,10 @@ const int ledVerde = 10;
 const int trigPin = 6;
 const int echoPin = 7;
 
+//PIN ALARMA 
+const int buzz=8;
+
+
 //Distancia en cm que define cuándo consideramos que un auto está presente.
 //Puede ajustarse según tu prototipo real.
 const long UMBRAL = 30;
@@ -49,10 +53,11 @@ void setup()
   Serial.begin(9600);
   pinMode(ledRojo, OUTPUT);
   pinMode(ledVerde, OUTPUT);
-
+pinMode(buzz, OUTPUT);
   // Estado inicial LEDS
   digitalWrite(ledRojo, LOW);
   digitalWrite(ledVerde, HIGH);
+digitalWrite(buzz, LOW);
 }
 
 void loop() 
@@ -67,12 +72,14 @@ void loop()
     // Auto detectado
     digitalWrite(ledRojo, HIGH);
     digitalWrite(ledVerde, LOW);
+digitalWrite(buzz, HIGH); // Buzzer/alarma encendido
   } 
   else 
   {
     // No hay auto
     digitalWrite(ledRojo, LOW);
     digitalWrite(ledVerde, HIGH);
+ digitalWrite(buzz, LOW); // Buzzer/alarma apagado
   }
 
   delay(150); // medio segundo de espera
