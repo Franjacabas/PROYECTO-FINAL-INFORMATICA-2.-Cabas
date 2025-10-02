@@ -7,10 +7,13 @@ const int ledVerde = 10;
 const int trigPin = 6;
 const int echoPin = 7;
 
-// Umbral para detectar auto (en cm)
+//Distancia en cm que define cuándo consideramos que un auto está presente.
+//Puede ajustarse según tu prototipo real.
 const long UMBRAL = 30;
 
-// Clase para manejar el sensor de distancia
+//Aca usamos POO: encapsulamos todo lo relacionado con el HC-SR04 en una clase.
+//Ventaja: después podemos tener varios sensores, o agregar funciones nuevas sin cambiar el resto del código.
+
 class SensorDistancia {
   private:
     int trig;
