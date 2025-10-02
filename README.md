@@ -6,4 +6,5 @@ mediante un buzzer y unos led. La deteccion de la salida del vehiculo sera por m
 que el peaton tenga precaucion y este alerta. 
 Mas adelante implementare por processing una interfaz donde la persona encargada del estacionamiento, pueda observar si hay lugares libres
 para estacionar, tambien dando la posibilidad a los coches de afuera encontrar un lugar en este mismo. Con un display o pantalla donde en la calle
-se observe cuantos lugares esten vacios o en caso de estar lleno, que se muestre.
+se observe cuantos lugares esten vacios o en caso de estar lleno, que se muestre. 
+(02-10-2025) en breves actualizaciones de codigo en arduino.
