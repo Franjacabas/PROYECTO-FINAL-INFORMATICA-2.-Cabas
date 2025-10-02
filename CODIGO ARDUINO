@@ -1,0 +1,76 @@
+#include <Arduino.h>
+
+// SELECCION DE PINES
+const int ledRojo = 9;
+const int ledVerde = 10;
+//PINES DEL SENSOR HC-SR04
+const int trigPin = 6;
+const int echoPin = 7;
+
+// Umbral para detectar auto (en cm)
+const long UMBRAL = 30;
+
+// Clase para manejar el sensor de distancia
+class SensorDistancia {
+  private:
+    int trig;
+    int echo;
+  public:
+    SensorDistancia(int t, int e)
+    {
+      trig = t;
+      echo = e;
+      pinMode(trig, OUTPUT);
+      pinMode(echo, INPUT);
+    }
+
+    long medirDistancia()
+    {
+      digitalWrite(trig, LOW);
+      delayMicroseconds(2);
+      digitalWrite(trig, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(trig, LOW);
+
+      long duracion = pulseIn(echo, HIGH);
+      long distancia = duracion * 0.034 / 2; // cm
+      return distancia;
+    }
+};
+
+// Inicializamos sensor
+SensorDistancia sensor(trigPin, echoPin);
+
+void setup() 
+{
+  Serial.begin(9600);
+  pinMode(ledRojo, OUTPUT);
+  pinMode(ledVerde, OUTPUT);
+
+  // Estado inicial LEDS
+  digitalWrite(ledRojo, LOW);
+  digitalWrite(ledVerde, HIGH);
+}
+
+void loop() 
+{
+  long distancia = sensor.medirDistancia();
+  Serial.print("Distancia: ");
+  Serial.print(distancia);
+  Serial.println(" cm");
+
+  if(distancia > 0 && distancia <= UMBRAL)
+  {
+    // Auto detectado
+    digitalWrite(ledRojo, HIGH);
+    digitalWrite(ledVerde, LOW);
+  } 
+  else 
+  {
+    // No hay auto
+    digitalWrite(ledRojo, LOW);
+    digitalWrite(ledVerde, HIGH);
+  }
+
+  delay(150); // medio segundo de espera
+}
