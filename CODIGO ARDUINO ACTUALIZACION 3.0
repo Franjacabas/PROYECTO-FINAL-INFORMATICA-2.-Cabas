@@ -1,0 +1,282 @@
+#include <Arduino.h>
+#include <Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// SELECCION DE PINES
+const int ledRojo = 9;
+const int ledVerde = 10;
+//PINES DEL SENSOR HC-SR04 (BARRERA DE SALIDA)
+const int trigPin = 6;
+const int echoPin = 7;
+//PINES DEL SENSOR HC-SR04 (PLAZA 3)
+const int trigPin3 = 12;
+const int echoPin3 = 13;
+//PIN ALARMA 
+const int buzz = 8;
+// PIN SERVO
+const int servoPin = 5;
+
+// PINES DEL MULTIPLEXOR 74HC4067
+const int S0 = 2;
+const int S1 = 3;
+const int S2 = 4;
+const int S3 = 11;
+const int SIG = A0;  // Pin de señal del multiplexor
+
+// Umbrales
+const long UMBRAL_BARRERA = 10;  // Para detectar auto saliendo (en cm)
+const long UMBRAL_PLAZA = 5;    // Para detectar auto en plaza 3 (en cm)
+
+// Control de barrera manual desde Processing
+bool barreraManual = false;
+unsigned long tiempoBarreraManual = 0;
+
+// Inicializar LCD I2C (dirección 0x27, 16 columnas, 2 filas)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Clase SensorDistancia
+class SensorDistancia {
+  private:
+    int trig;
+    int echo;
+  public:
+    //constructor
+    SensorDistancia(int t, int e) {
+      trig = t;
+      echo = e;
+      pinMode(trig, OUTPUT);
+      pinMode(echo, INPUT);
+    }
+    //metodo
+    long medirDistancia() {
+      digitalWrite(trig, LOW);
+      delayMicroseconds(2);
+      digitalWrite(trig, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(trig, LOW);
+      
+      long duracion = pulseIn(echo, HIGH);
+      long distancia = duracion * 0.034 / 2; // cm
+      return distancia;
+    }
+};
+
+// Inicializamos sensores usando la clase
+SensorDistancia sensorBarrera(trigPin, echoPin);    // Sensor para barrera de salida
+SensorDistancia sensorPlaza3(trigPin3, echoPin3);   // Sensor para plaza 3
+Servo barrera;
+
+// Función para seleccionar canal del multiplexor
+void seleccionarCanal(int canal) {
+  digitalWrite(S0, bitRead(canal, 0));
+  digitalWrite(S1, bitRead(canal, 1));
+  digitalWrite(S2, bitRead(canal, 2));
+  digitalWrite(S3, bitRead(canal, 3));
+  delayMicroseconds(10);
+}
+
+// Función para leer sensor IR en un canal específico
+bool leerSensorIR(int canal) 
+{
+   seleccionarCanal(canal);
+   delay(5);
+   int lectura = digitalRead(SIG);
+   // Si el sensor da LOW cuando detecta, retorna true (plaza ocupada)
+   // Si funciona al revés, cambia LOW por HIGH
+   return (lectura == LOW);
+}
+
+// Función para enviar datos a Processing
+void enviarDatosProcessing(bool p1, bool p2, bool p3) 
+{
+   // Formato: P1:0,P2:1,P3:0 (0=libre, 1=ocupado
+   Serial.print("P1:");
+   Serial.print(p1 ? "1" : "0");
+   Serial.print(",P2:");
+   Serial.print(p2 ? "1" : "0");
+   Serial.print(",P3:");
+   Serial.println(p3 ? "1" : "0");
+}
+
+// Función para leer comandos desde Processing
+void leerComandosProcessing() 
+{
+  if (Serial.available() > 0)
+  {
+    char comando = Serial.read();
+    
+    if (comando == 'A') 
+    {
+      // Abrir barrera manualmente desde Processing
+      barreraManual = true;
+      tiempoBarreraManual = millis();
+      Serial.println("Barrera abierta desde Processing");
+    } 
+    else if (comando == 'C') 
+    {
+      // Cerrar barrera
+      barreraManual = false;
+      Serial.println("Barrera cerrada");
+    }
+  }
+}
+
+// Función para manejar barrera manual
+void manejarBarreraManual() 
+{
+  if (barreraManual) 
+  {
+    // Mantener barrera abierta por 5 segundos
+    if (millis() - tiempoBarreraManual < 5000) 
+    {
+      digitalWrite(ledRojo, HIGH);
+      digitalWrite(ledVerde, LOW);
+      barrera.write(90);
+      
+      lcd.clear();
+      lcd.setCursor(0, 0); //LImpiamos pantalla para escribir lo siquiente
+      lcd.print("Barrera Manual");
+      lcd.setCursor(0, 1);
+      int segundos = 5 - ((millis() - tiempoBarreraManual) / 1000);
+      lcd.print("Cerrando en ");
+      lcd.print(segundos);
+      lcd.print("s");
+    } else {
+      // Cerrar barrera después de 5 segundos
+      barreraManual = false;
+    }
+  }
+}
+
+void setup() 
+{
+  Serial.begin(9600);
+  pinMode(ledRojo, OUTPUT);
+  pinMode(ledVerde, OUTPUT);
+  pinMode(buzz, OUTPUT);
+
+  // Configurar pines del multiplexor
+  pinMode(S0, OUTPUT);
+  pinMode(S1, OUTPUT);
+  pinMode(S2, OUTPUT);
+  pinMode(S3, OUTPUT);
+  pinMode(SIG, INPUT);
+
+  // Servo
+  barrera.attach(servoPin);
+  barrera.write(0);
+
+  // Estado inicial LEDS
+  digitalWrite(ledRojo, LOW);
+  digitalWrite(ledVerde, HIGH);
+  digitalWrite(buzz, LOW);
+
+  // Inicializar LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  
+  lcd.setCursor(0, 0);
+  lcd.print("Sistema Parking");
+  lcd.setCursor(0, 1);
+  lcd.print("3 Plazas");
+  delay(2000);
+  
+  lcd.clear();
+  
+  Serial.println("Sistema iniciado");
+  Serial.println("Conectado con Processing");
+}
+
+void loop() 
+{
+  // Leer comandos desde Processing
+  leerComandosProcessing();
+  
+  // Si hay barrera manual activa, manejarla y salir
+  if (barreraManual) 
+  {
+    manejarBarreraManual();
+    delay(100);
+    return;
+  }
+  
+  // PARTE 1: Verificar estado de las plazas
+  bool plaza1Ocupada = leerSensorIR(0);  // Canal C0 = Plaza 1 (sensor IR)
+  bool plaza2Ocupada = leerSensorIR(1);  // Canal C1 = Plaza 2 (sensor IR)
+  
+  // Plaza 3 con HC-SR04
+  long distanciaPlaza3 = sensorPlaza3.medirDistancia(); //MEDIR DISTANCIA EN METODO DE OBJETOS
+  bool plaza3Ocupada = (distanciaPlaza3 > 0 && distanciaPlaza3 <= UMBRAL_PLAZA);
+  
+  // Enviar datos a Processing cada ciclo
+  enviarDatosProcessing(plaza1Ocupada, plaza2Ocupada, plaza3Ocupada);
+  
+  // Contar lugares libres
+  int lugaresLibres = 0;
+  if (!plaza1Ocupada) lugaresLibres++;
+  if (!plaza2Ocupada) lugaresLibres++;
+  if (!plaza3Ocupada) lugaresLibres++;
+  
+  // PARTE 2: Verificar barrera de salida
+  long distanciaBarrera = sensorBarrera.medirDistancia();
+
+  if(distanciaBarrera > 0 && distanciaBarrera <= UMBRAL_BARRERA) //Se levanta barrera
+   {
+    // Vehículo saliendo
+    digitalWrite(ledRojo, HIGH);
+    digitalWrite(ledVerde, LOW);
+    barrera.write(90);
+    
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Vehiculo");
+    lcd.setCursor(0, 1);
+    lcd.print("Saliendo...");
+    
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(buzz, HIGH);
+      delay(150);
+      digitalWrite(buzz, LOW);
+      delay(150);
+    }
+  } 
+  else {
+    // Sin vehículo saliendo - mostrar estado de plazas
+    digitalWrite(ledRojo, LOW);
+    digitalWrite(ledVerde, HIGH);
+    digitalWrite(buzz, LOW);
+    barrera.write(0);
+    
+    lcd.clear();
+    if (lugaresLibres == 0) {
+      lcd.setCursor(0, 0);
+      lcd.print("No hay lugar");
+      lcd.setCursor(0, 1);
+      lcd.print("Parking lleno");
+    } else if (lugaresLibres == 1) {
+      lcd.setCursor(0, 0);
+      lcd.print("1 lugar libre");
+      lcd.setCursor(0, 1);
+      if (!plaza1Ocupada) lcd.print("Plaza 1");
+      else if (!plaza2Ocupada) lcd.print("Plaza 2");
+      else lcd.print("Plaza 3");
+    } else if (lugaresLibres == 2) {
+      lcd.setCursor(0, 0);
+      lcd.print("2 lugares libres");
+      lcd.setCursor(0, 1);
+      // Mostrar cuáles están libres
+      if (plaza1Ocupada) lcd.print("P2 y P3");
+      else if (plaza2Ocupada) lcd.print("P1 y P3");
+      else lcd.print("P1 y P2");
+    } else {
+      lcd.setCursor(0, 0);
+      lcd.print("3 lugares libres");
+      lcd.setCursor(0, 1);
+      lcd.print("Bienvenido!");
+    }
+  }
+
+  delay(200);
+}  
