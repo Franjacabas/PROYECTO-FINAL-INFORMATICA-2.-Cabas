@@ -21,3 +21,24 @@ colocar los sensores IR.
 A futuro se piensa implemetar en proccesing la interfaz anteriormente mencionada, con la idea de que si algun vehiculo quiere ingresar, el operador de 
 el 'ok' para q se habilite la barrera y accesa el auto. Esto para implementar una parte bidireccional que nos solicita la consigna del PROYECTO.
 
+(16-10-25) ACTUALIZACION.
+Como mencionamos anteriormente, se implementaron los sensores IR-08H pero cometí el error de no informarme sobre esos sensores. Resulto que cuando se realizo la conexion,
+el funcionamiento de este mismo solamente detectaba la vibracion de los objetos, no me detectaba si un objeto (automovil) estaba estatico. Lo que se implemente correctamente fue
+la pantalla LCD 16X2, más un modulo I2C para facilitar la conexion, previamente soldando estos dos componentes. 
+
+(17-10-25) ACTUALIZACION
+Se compraron/cambiaron los sensores (se adjunto link el archivo de google docs como referencia). Y la conexion era igual a la de los sensores anteriores.
+Ya con todos los componentes determinados teniamos todo el codigo ARDUINO LISTO. Se agrego Otro sensor HC-SR04 como detector de vehiculos en las plazas, por motivo
+que cuando se compraron los sensores nuevos, no habia mas stock y por el momento se consiguieron dos (DOS SENSORES DE DETECCION DE OBSTACULOS + OTRO HC-SR04).
+
+(18-10-25) COMIENZO PROCESSING
+Se comenzo la programacion de codigo de processing, me base en mi idea original que era "dibujar" las plazas de estacionamiento para cadada sensor.
+Con ayuda de PDF Y ARCHIVOS otorgados por la catedra y con un poco de ayuda de inteligencia artificial se pudo realizar el codigo.
+EXTRA. A la interfaz se le agrego un boton, donde la logica era que cuando un vehiculo no registrado quisiera acceder al estacionamiento. Ese permiso
+se le otorgue cuando el "cliente" pague. Entonces mediante el boton, se levanta la barra para su acceso.
+
+(20-10-25) ARCHIVOS
+al codigo arduino le voy a implementar una funcion donde pueda guardar en archivos, la actividad del estacinamiento. Hora, fecha, cuanto tiempo estuvo el vehiculo,
+y en que plaza se encontraba.
+
+
