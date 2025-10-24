@@ -1,0 +1,130 @@
+#include <Arduino.h>
+#include <Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// SELECCION DE PINES
+const int ledRojo = 9;
+const int ledVerde = 10;
+//PINES DEL SENSOR HC-SR04
+const int trigPin = 6;
+const int echoPin = 7;
+//PIN ALARMA 
+const int buzz = 8;
+// PIN SERVO
+const int servoPin = 5;
+
+// Umbral para detectar auto (en cm)
+const long UMBRAL = 10;
+
+// Inicializar LCD I2C (dirección 0x27, 16 columnas, 2 filas)
+// Si no funciona con 0x27, prueba con 0x3F
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Clase SensorDistancia
+class SensorDistancia {
+  private:
+    int trig;
+    int echo;
+  public:
+    //constructor
+    SensorDistancia(int t, int e) {
+      trig = t;
+      echo = e;
+      pinMode(trig, OUTPUT);
+      pinMode(echo, INPUT);
+    }
+    //metodo
+    long medirDistancia() {
+      digitalWrite(trig, LOW);
+      delayMicroseconds(2);
+      digitalWrite(trig, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(trig, LOW);
+      
+      //velocidad del sonido en cm/µs.
+      long duracion = pulseIn(echo, HIGH);
+      long distancia = duracion * 0.034 / 2; // cm
+      return distancia;
+    }
+};
+
+// Inicializamos sensor
+SensorDistancia sensor(trigPin, echoPin);
+Servo barrera;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(ledRojo, OUTPUT);
+  pinMode(ledVerde, OUTPUT);
+  pinMode(buzz, OUTPUT);
+
+  // Servo
+  barrera.attach(servoPin);
+  barrera.write(0);  // Barrera abajo al inicio
+
+  // Estado inicial LEDS
+  digitalWrite(ledRojo, LOW);
+  digitalWrite(ledVerde, HIGH);
+  digitalWrite(buzz, LOW);
+
+  // Inicializar LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  
+  // Mensaje inicial
+  lcd.setCursor(0, 0);
+  lcd.print("Sistema Barrera");
+  lcd.setCursor(0, 1);
+  lcd.print("Iniciado...");
+  delay(2000);  // Mostrar mensaje 2 segundos
+  
+  lcd.clear();
+}
+
+void loop() {
+  //medimos distancia mediante metodo
+  long distancia = sensor.medirDistancia();
+  Serial.print("Distancia: ");
+  Serial.print(distancia);
+  Serial.println(" cm");
+
+  if(distancia > 0 && distancia <= UMBRAL) {
+    // Auto detectado
+    digitalWrite(ledRojo, HIGH);
+    digitalWrite(ledVerde, LOW);
+    barrera.write(90);  // Barrera arriba
+    
+    // Actualizar LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Vehiculo");
+    lcd.setCursor(0, 1);
+    lcd.print("Saliendo...");
+    
+    //Buzzer tipo alarma: "pip pip pip"
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(buzz, HIGH);
+      delay(150);  // duración del pitido
+      digitalWrite(buzz, LOW);
+      delay(150);  // pausa entre pitidos
+    }
+  } 
+  else {
+    // No hay auto
+    digitalWrite(ledRojo, LOW);
+    digitalWrite(ledVerde, HIGH);
+    digitalWrite(buzz, LOW); // Buzzer/alarma apagado
+    barrera.write(0);   //Barrera abajo
+    
+    // Actualizar LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Sin vehiculo");
+    lcd.setCursor(0, 1);
+    lcd.print("Espera...");
+  }
+
+  delay(150);
+}
