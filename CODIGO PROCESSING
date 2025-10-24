@@ -1,0 +1,239 @@
+//Importa la librería para comunicación serial (USB) con Arduino
+import processing.serial.*;
+
+Serial puerto;
+String datos = ""; // string temporal para almacenar lo que llega del Arduino
+
+// Estados de las plazas (true = ocupado, false = libre)
+boolean plaza1Ocupada = false;
+boolean plaza2Ocupada = false;
+boolean plaza3Ocupada = false;
+
+// Estado de la barrera
+boolean barreraAbierta = false;
+int tiempoBarrera = 0; //: guarda cuándo se abrió (en milisegundos) para cerrarla después de 5 segundos
+
+// Botón de barrera
+int btnX = 600;
+int btnY = 500;
+int btnAncho = 200;
+int btnAlto = 60;
+
+void setup() 
+{
+  size(900, 650);
+  
+  // Configurar puerto serial
+  // IMPORTANTE: Cambiar el índice [0] por el puerto correcto del Arduino (donde esta el cable)
+  println("Puertos disponibles:");
+  printArray(Serial.list()); //me va a mostrar donde tengo que conectar el serial list
+  
+ //centra el txt
+  puerto = new Serial(this, Serial.list()[0], 9600);
+  
+  textAlign(CENTER, CENTER);
+}
+
+void draw() {
+  background(40);
+  
+  // Título
+  fill(255);
+  textSize(32);
+  text("SISTEMA DE PARKING", width/2, 50);
+  
+  // Subtítulo - lugares disponibles
+  int libres = 0;
+  if (!plaza1Ocupada) libres++; //si NO esta ocupada, suma 1
+  if (!plaza2Ocupada) libres++;
+  if (!plaza3Ocupada) libres++;
+  
+  textSize(20);
+  fill(100, 255, 100);
+  text("Lugares disponibles: " + libres + "/3", width/2, 100);
+  
+  // Dibujar plazas de estacionamiento
+  dibujarPlaza(150, 200, 1, plaza1Ocupada);
+  dibujarPlaza(370, 200, 2, plaza2Ocupada);
+  dibujarPlaza(590, 200, 3, plaza3Ocupada);
+  
+  // Dibujar botón de barrera
+  dibujarBotonBarrera();
+  
+  // Manejar tiempo de barrera
+  if (barreraAbierta) 
+  {
+    if (millis() - tiempoBarrera > 5000) 
+    {
+      barreraAbierta = false;
+      enviarComando('C'); // C = Cerrar barrera
+    }
+  }
+  
+  // Leer datos del Arduino (si está conectado)
+  if (puerto != null && puerto.available() > 0) 
+  {
+    leerDatosSerial();
+  }
+}
+
+void dibujarPlaza(int x, int y, int numero, boolean ocupada) 
+{
+  pushMatrix();
+  translate(x, y);
+  
+  // Rectángulo de la plaza
+  strokeWeight(3);
+  if (ocupada) {
+    fill(200, 50, 50);  // Rojo si está ocupada
+    stroke(255, 0, 0);
+  } else {
+    fill(50, 200, 50);  // Verde si está libre
+    stroke(0, 255, 0);
+  }
+  rect(0, 0, 180, 250, 10);
+  
+  // Número de plaza
+  fill(255);
+  textSize(40);
+  text("P" + numero, 90, 50);
+  
+  // Dibujar auto si está ocupada
+  if (ocupada) {
+    fill(100, 100, 150);
+    stroke(50);
+    strokeWeight(2);
+    // Cuerpo del auto
+    rect(30, 80, 120, 140, 15);
+    // Ventanas
+    fill(150, 200, 250);
+    rect(40, 90, 100, 50, 5);
+    // Ruedas
+    fill(30);
+    ellipse(50, 210, 30, 30);
+    ellipse(130, 210, 30, 30);
+  } else {
+    // Mostrar "LIBRE"
+    fill(255);
+    textSize(28);
+    text("LIBRE", 90, 150);
+  }
+  
+  // Estado en texto
+  textSize(18);
+  if (ocupada) {
+    fill(255, 100, 100);
+    text("OCUPADO", 90, 230);
+  } else {
+    fill(100, 255, 100);
+    text("DISPONIBLE", 90, 230);
+  }
+  
+  popMatrix();
+}
+
+void dibujarBotonBarrera() {
+  // Verificar si el mouse está sobre el botón
+  boolean mouseEncima = mouseX > btnX && mouseX < btnX + btnAncho &&
+                        mouseY > btnY && mouseY < btnY + btnAlto;
+  
+  // Dibujar botón
+  strokeWeight(3); //grosor del diujo
+  if (barreraAbierta) {
+    fill(100, 100, 100);
+    stroke(150);
+  } else if (mouseEncima) {
+    fill(100, 150, 255);
+    stroke(150, 200, 255);
+  } else {
+    fill(50, 100, 200);
+    stroke(100, 150, 255);
+  }
+  
+  rect(btnX, btnY, btnAncho, btnAlto, 10);
+  
+  // Texto del botón
+  fill(255);
+  textSize(24);
+  if (barreraAbierta) 
+  {
+    text("CERRANDO...", btnX + btnAncho/2, btnY + btnAlto/2);
+    
+    // Mostrar tiempo restante
+    int tiempoRestante = 5 - (millis() - tiempoBarrera) / 1000;
+    textSize(18);
+    text(tiempoRestante + "s", btnX + btnAncho/2, btnY + btnAlto + 25);
+  } else {
+    text("ABRIR BARRERA", btnX + btnAncho/2, btnY + btnAlto/2);
+  }
+  
+  // Indicador visual de barrera
+  int barreraX = 100;
+  int barreraY = 520;
+  
+  fill(255);
+  textSize(16);
+  textAlign(LEFT);
+  text("Estado Barrera:", barreraX, barreraY);
+  
+  // Dibujar barrera
+  stroke(100);
+  strokeWeight(8);
+  if (barreraAbierta) {
+    stroke(100, 255, 100);
+    line(barreraX + 150, barreraY - 20, barreraX + 150, barreraY - 60); // Vertical (arriba)
+    fill(100, 255, 100);
+    text("ABIERTA", barreraX + 180, barreraY);
+  } else {
+    stroke(255, 100, 100);
+    line(barreraX + 100, barreraY - 20, barreraX + 200, barreraY - 20); // Horizontal (cerrada)
+    fill(255, 100, 100);
+    text("CERRADA", barreraX + 180, barreraY);
+  }
+  
+  textAlign(CENTER);
+}
+
+void mousePressed() {
+  // Verificar si se hizo clic en el botón de barrera
+  if (mouseX > btnX && mouseX < btnX + btnAncho &&
+      mouseY > btnY && mouseY < btnY + btnAlto) {
+    if (!barreraAbierta) {
+      barreraAbierta = true;
+      tiempoBarrera = millis();
+      enviarComando('A'); // A = Abrir barrera
+    }
+  }
+}
+
+void leerDatosSerial() {
+  try {
+    datos = puerto.readStringUntil('\n');
+    if (datos != null) {
+      datos = trim(datos);
+      
+      // Formato esperado: "P1:0,P2:1,P3:0"
+      // 0 = libre, 1 = ocupado
+      String[] partes = split(datos, ',');
+      
+      for (String parte : partes) {
+        if (parte.contains("P1:")) { // es un método de String que pregunta: "¿Este texto contiene esta palabra/frase?"
+          plaza1Ocupada = (parte.charAt(3) == '1');
+        } else if (parte.contains("P2:")) {
+          plaza2Ocupada = (parte.charAt(3) == '1');
+        } else if (parte.contains("P3:")) {
+          plaza3Ocupada = (parte.charAt(3) == '1');
+        }
+      }
+    }
+  } catch (Exception e) {
+    println("Error leyendo datos: " + e);
+  }
+}
+
+void enviarComando(char comando) {
+  if (puerto != null) {
+    puerto.write(comando);
+    println("Comando enviado: " + comando);
+  }
+}
