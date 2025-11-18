@@ -1,0 +1,167 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+#include <ParkingSystem.h>
+
+// ========== DECLARACIÓN DE PINES ==========
+const int ledVerde = 2;
+const int ledRojo = 3;
+const int buzz = 4;
+const int trigPin = 5;
+const int echoPin = 6;
+const int S0 = 10;
+const int S1 = 9;
+const int S2 = 8;
+const int S3 = 7;
+const int SIG = A0;
+const int servoPin = 11;
+const int trigPin3 = 12;
+const int echoPin3 = 13;
+
+// ========== UMBRALES ==========
+const long UMBRAL_BARRERA = 10;
+const long UMBRAL_PLAZA = 5;
+
+// ========== ANTI-REBOTE ==========
+bool plaza1Anterior = false;
+bool plaza2Anterior = false;
+bool plaza3Anterior = false;
+unsigned long ultimoCambioP1 = 0;
+unsigned long ultimoCambioP2 = 0;
+unsigned long ultimoCambioP3 = 0;
+//DEBOUNCE TIME ES UNA VARIABLE QUE ME DICE EL TIEMPO MINIMO ENTRE CAMBIOS "bandera"
+const unsigned long DEBOUNCE_TIME = 1000; // 1 segundo de estabilización
+
+// ========== OBJETOS ==========
+
+//SensorDistancia es la clase y Barrera y plaza son los objetos
+SensorDistancia sensorBarrera(trigPin, echoPin);
+SensorDistancia sensorPlaza3(trigPin3, echoPin3);
+Multiplexor mux(S0, S1, S2, S3, SIG);
+BarreraManual barreraManual;
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+DisplayLCD display(&lcd);
+Servo servoBarrera;
+ControladorBarrera controlBarrera(&servoBarrera, ledRojo, ledVerde, buzz);
+
+void setup() {
+  Serial.begin(9600);
+  
+  // Inicializar componentes
+  mux.inicializar();
+  servoBarrera.attach(servoPin);
+  servoBarrera.write(0);
+  controlBarrera.inicializar();
+  display.inicializar();
+  
+  Serial.println("Sistema iniciado");
+  Serial.println("Conectado con Processing");
+}
+
+void loop() {
+  // Leer comandos de Processing
+  char comando = Comunicacion::leerComando();
+  if (comando == 'A') {
+    barreraManual.activar();
+    Serial.println("Barrera abierta desde Processing");
+  } else if (comando == 'C') {
+    barreraManual.desactivar();
+    Serial.println("Barrera cerrada");
+  }
+  
+  // Actualizar barrera manual
+  barreraManual.actualizar();
+  
+  // Si barrera manual activa
+  if (barreraManual.estaActiva()) {
+    controlBarrera.abrir();
+    display.mostrarBarreraManual(barreraManual.tiempoRestante());
+    delay(100);
+    return;
+  }
+  
+  // ========== LEER SENSORES CON FILTRO ==========
+  // Leer múltiples veces y promediar
+  int lecturasP1 = 0;
+  int lecturasP2 = 0;
+  
+  for(int i = 0; i < 5; i++) {
+    if(mux.leerSensorIR(0)) lecturasP1++;
+    delay(20);
+    if(mux.leerSensorIR(1)) lecturasP2++;
+    delay(20);
+  }
+  
+  // Solo considera ocupado si 3 de 5 lecturas lo confirman
+  bool plaza1 = (lecturasP1 >= 3);
+  bool plaza2 = (lecturasP2 >= 3);
+  
+  delay(50);
+  long distPlaza3 = sensorPlaza3.medirDistancia();
+  bool plaza3 = (distPlaza3 > 0 && distPlaza3 <= UMBRAL_PLAZA);
+  
+  // ========== DETECTAR CAMBIOS ESTABLES ==========
+  unsigned long ahora = millis();
+  bool hayCambio = false;
+  
+  // Plaza 1
+  if (plaza1 != plaza1Anterior) {
+    if (ahora - ultimoCambioP1 > DEBOUNCE_TIME) {
+      plaza1Anterior = plaza1;
+      ultimoCambioP1 = ahora;
+      hayCambio = true;
+      Serial.print("CAMBIO DETECTADO P1: ");
+      Serial.println(plaza1 ? "OCUPADA" : "LIBRE");
+    }
+  }
+  
+  // Plaza 2
+  if (plaza2 != plaza2Anterior) {
+    if (ahora - ultimoCambioP2 > DEBOUNCE_TIME) {
+      plaza2Anterior = plaza2;
+      ultimoCambioP2 = ahora;
+      hayCambio = true;
+      Serial.print("CAMBIO DETECTADO P2: ");
+      Serial.println(plaza2 ? "OCUPADA" : "LIBRE");
+    }
+  }
+  
+  // Plaza 3
+  if (plaza3 != plaza3Anterior) {
+    if (ahora - ultimoCambioP3 > DEBOUNCE_TIME) {
+      plaza3Anterior = plaza3;
+      ultimoCambioP3 = ahora;
+      hayCambio = true;
+      Serial.print("CAMBIO DETECTADO P3: ");
+      Serial.println(plaza3 ? "OCUPADA" : "LIBRE");
+    }
+  }
+  
+  // SOLO ENVIAR CUANDO HAY UN CAMBIO CONFIRMADO
+  if (hayCambio) {
+    Comunicacion::enviarDatos(plaza1Anterior, plaza2Anterior, plaza3Anterior);
+  }
+  
+  // Contar libres (usar estados anteriores estables)
+  int libres = 0;
+  if (!plaza1Anterior) libres++;
+  if (!plaza2Anterior) libres++;
+  if (!plaza3Anterior) libres++;
+  
+  // Verificar barrera de salida
+  delay(50);
+  long distBarrera = sensorBarrera.medirDistancia();
+  
+  if (distBarrera > 0 && distBarrera <= UMBRAL_BARRERA) {
+    // Vehículo saliendo
+    controlBarrera.abrir();
+    display.mostrarVehiculoSaliendo();
+    controlBarrera.activarAlarma();
+  } else {
+    // Sin vehículo
+    controlBarrera.cerrar();
+    display.mostrarEstadoPlazas(libres, plaza1Anterior, plaza2Anterior, plaza3Anterior);
+  }
+  
+  delay(200);
+}
