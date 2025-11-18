@@ -1,0 +1,213 @@
+/*
+  GestorEventos - Clase para manejar listas enlazadas y archivos de texto
+  Genera un archivo nuevo por cada sesión
+  Solo guarda cuando ocurre un EVENTO (entrada/salida)
+*/
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+
+// ========== CLASE NODO ==========
+class Nodo {
+  int dia, mes, anio;
+  int hora, minuto, segundo;
+  String evento;
+  boolean p1, p2, p3;
+  int libres;
+  Nodo siguiente;
+  
+  Nodo(String tipoEvento, boolean plaza1, boolean plaza2, boolean plaza3) {
+    dia = day();
+    mes = month();
+    anio = year();
+    hora = hour();
+    minuto = minute();
+    segundo = second();
+    
+    evento = tipoEvento;
+    p1 = plaza1;
+    p2 = plaza2;
+    p3 = plaza3;
+    
+    libres = 0;
+    if (!p1) libres++;
+    if (!p2) libres++;
+    if (!p3) libres++;
+    
+    siguiente = null;
+  }
+}
+
+// ========== CLASE GESTOR DE EVENTOS ==========
+class GestorEventos {
+  private Nodo cabeza;
+  private Nodo cola;
+  private int cantidadEventos;
+  private String nombreArchivo;
+  
+  GestorEventos(String archivoBase) {
+    cabeza = null;
+    cola = null;
+    cantidadEventos = 0;
+    
+    // Generar nombre único con fecha y hora
+    String timestamp = year() + "-" + nf(month(), 2) + "-" + nf(day(), 2) + "_" + 
+                       nf(hour(), 2) + "-" + nf(minute(), 2) + "-" + nf(second(), 2);
+    nombreArchivo = "parking_" + timestamp + ".txt";
+    
+    println("Archivo de sesión: " + nombreArchivo);
+  }
+  
+  // Agregar evento
+  void agregar(String tipoEvento, boolean p1, boolean p2, boolean p3) {
+    Nodo nuevoNodo = new Nodo(tipoEvento, p1, p2, p3);
+    
+    if (cabeza == null) {
+      cabeza = nuevoNodo;
+      cola = nuevoNodo;
+    } else {
+      cola.siguiente = nuevoNodo;
+      cola = nuevoNodo;
+    }
+    
+    cantidadEventos++;
+    // Solo guarda cuando hay un evento real, no constantemente
+    guardarEventoIndividual(nuevoNodo);
+    
+    println("[EVENTO #" + cantidadEventos + "] " + tipoEvento);
+  }
+  
+  // Guardar solo el evento nuevo (append al archivo)
+  void guardarEventoIndividual(Nodo evento) {
+    try {
+      File archivo = new File(sketchPath(nombreArchivo));
+      PrintWriter salida;
+      
+      // Si el archivo no existe, crear con encabezado
+      if (!archivo.exists()) {
+        salida = createWriter(nombreArchivo);
+        salida.println("========================================");
+        salida.println("   SISTEMA DE PARKING - REGISTRO");
+        salida.println("========================================");
+        salida.println("Archivo creado: " + day() + "/" + month() + "/" + year() + 
+                       " - " + hour() + ":" + minute() + ":" + second());
+        salida.println("========================================");
+        salida.println();
+      } else {
+        // Si existe, agregar al final
+        salida = new PrintWriter(new FileWriter(sketchPath(nombreArchivo), true));
+      }
+      
+      // Escribir el evento
+      salida.println("--- EVENTO #" + cantidadEventos + " ---");
+      salida.println("Fecha: " + evento.dia + "/" + evento.mes + "/" + evento.anio);
+      salida.println("Hora: " + nf(evento.hora, 2) + ":" + nf(evento.minuto, 2) + ":" + nf(evento.segundo, 2));
+      salida.println("Tipo: " + evento.evento);
+      salida.println("Plaza 1: " + (evento.p1 ? "OCUPADA" : "LIBRE"));
+      salida.println("Plaza 2: " + (evento.p2 ? "OCUPADA" : "LIBRE"));
+      salida.println("Plaza 3: " + (evento.p3 ? "OCUPADA" : "LIBRE"));
+      salida.println("Plazas libres: " + evento.libres);
+      salida.println();
+      
+      salida.flush();
+      salida.close();
+    } catch (Exception e) {
+      println("Error guardando evento: " + e);
+    }
+  }
+  
+  // Guardar todos los eventos (solo para exportar o al cerrar)
+  void guardar() {
+    try {
+      PrintWriter salida = createWriter(nombreArchivo);
+      
+      salida.println("========================================");
+      salida.println("   SISTEMA DE PARKING - REGISTRO");
+      salida.println("========================================");
+      salida.println("Total de eventos: " + cantidadEventos);
+      salida.println("Generado: " + day() + "/" + month() + "/" + year() + 
+                     " - " + hour() + ":" + minute() + ":" + second());
+      salida.println("========================================");
+      salida.println();
+      
+      Nodo actual = cabeza;
+      int contador = 1;
+      
+      while (actual != null) {
+        salida.println("--- EVENTO #" + contador + " ---");
+        salida.println("Fecha: " + actual.dia + "/" + actual.mes + "/" + actual.anio);
+        salida.println("Hora: " + nf(actual.hora, 2) + ":" + nf(actual.minuto, 2) + ":" + nf(actual.segundo, 2));
+        salida.println("Tipo: " + actual.evento);
+        salida.println("Plaza 1: " + (actual.p1 ? "OCUPADA" : "LIBRE"));
+        salida.println("Plaza 2: " + (actual.p2 ? "OCUPADA" : "LIBRE"));
+        salida.println("Plaza 3: " + (actual.p3 ? "OCUPADA" : "LIBRE"));
+        salida.println("Plazas libres: " + actual.libres);
+        salida.println();
+        
+        actual = actual.siguiente;
+        contador++;
+      }
+      
+      salida.println("========================================");
+      salida.println("Fin del registro - Total: " + cantidadEventos + " eventos");
+      salida.println("========================================");
+      
+      salida.flush();
+      salida.close();
+    } catch (Exception e) {
+      println("Error guardando archivo completo: " + e);
+    }
+  }
+  
+  // Exportar a CSV
+  void exportarCSV() {
+    String nombreCSV = "parking_export_" + year() + "-" + nf(month(), 2) + "-" + nf(day(), 2) + ".csv";
+    PrintWriter csv = createWriter(nombreCSV);
+    
+    csv.println("Fecha,Hora,Evento,Plaza1,Plaza2,Plaza3,Libres");
+    
+    Nodo actual = cabeza;
+    while (actual != null) {
+      String fecha = actual.anio + "-" + nf(actual.mes, 2) + "-" + nf(actual.dia, 2);
+      String tiempo = nf(actual.hora, 2) + ":" + nf(actual.minuto, 2) + ":" + nf(actual.segundo, 2);
+      String est1 = actual.p1 ? "Ocupada" : "Libre";
+      String est2 = actual.p2 ? "Ocupada" : "Libre";
+      String est3 = actual.p3 ? "Ocupada" : "Libre";
+      
+      csv.println(fecha + "," + tiempo + "," + actual.evento + "," + est1 + "," + est2 + "," + est3 + "," + actual.libres);
+      
+      actual = actual.siguiente;
+    }
+    
+    csv.close();
+    println("CSV exportado: " + nombreCSV);
+  }
+  
+  // Listar todos los eventos
+  void listar() {
+    println("========== EVENTOS REGISTRADOS ==========");
+    Nodo actual = cabeza;
+    int contador = 1;
+    
+    while (actual != null) {
+      String fecha = actual.anio + "-" + nf(actual.mes, 2) + "-" + nf(actual.dia, 2);
+      String tiempo = nf(actual.hora, 2) + ":" + nf(actual.minuto, 2) + ":" + nf(actual.segundo, 2);
+      println(contador + ". " + fecha + " " + tiempo + " - " + actual.evento + " (Libres: " + actual.libres + ")");
+      
+      actual = actual.siguiente;
+      contador++;
+    }
+    println("=========================================");
+  }
+  
+  // Obtener cantidad de eventos
+  int getCantidad() {
+    return cantidadEventos;
+  }
+  
+  // Obtener nombre del archivo actual
+  String getNombreArchivo() {
+    return nombreArchivo;
+  }
+}
