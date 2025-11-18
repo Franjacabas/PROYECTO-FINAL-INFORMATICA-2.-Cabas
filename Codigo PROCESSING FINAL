@@ -1,0 +1,298 @@
+// Importa la librería para comunicación serial
+import processing.serial.*;
+
+// ========== VARIABLES GLOBALES ==========
+Serial puerto;
+String datos = "";
+
+// Estados de las plazas
+boolean plaza1Ocupada = false;
+boolean plaza2Ocupada = false;
+boolean plaza3Ocupada = false;
+
+// Para detectar cambios
+boolean plaza1Anterior = false;
+boolean plaza2Anterior = false;
+boolean plaza3Anterior = false;
+boolean barreraAnterior = false;
+
+// Debouncing (anti-rebote) para evitar detecciones múltiples
+int ultimoCambioP1 = 0;
+int ultimoCambioP2 = 0;
+int ultimoCambioP3 = 0;
+int tiempoDebounce = 2000; // 2 segundos de espera entre eventos de la misma plaza
+
+// Estado de la barrera
+boolean barreraAbierta = false;
+int tiempoBarrera = 0;
+
+// Botón de barrera
+int btnX = 600;
+int btnY = 500;
+int btnAncho = 200;
+int btnAlto = 60;
+
+// ========== GESTOR DE EVENTOS ==========
+GestorEventos gestor;
+
+void setup() {
+  size(900, 650);
+  
+  println("Puertos disponibles:");
+  printArray(Serial.list());
+  
+  puerto = new Serial(this, Serial.list()[0], 9600);
+  textAlign(CENTER, CENTER);
+  
+  // Inicializar gestor de eventos
+  gestor = new GestorEventos("parking_data.txt");
+  // Ya no necesita cargar() - se crea automáticamente
+  
+  println("Sistema iniciado");
+}
+
+void draw() {
+  background(40);
+  
+  // Título
+  fill(255);
+  textSize(32);
+  text("SISTEMA DE PARKING", width/2, 50);
+  
+  // Subtítulo
+  int libres = 0;
+  if (!plaza1Ocupada) libres++;
+  if (!plaza2Ocupada) libres++;
+  if (!plaza3Ocupada) libres++;
+  
+  textSize(20);
+  fill(100, 255, 100);
+  text("Lugares disponibles: " + libres + "/3", width/2, 100);
+  
+  // Mostrar eventos
+  fill(100, 200, 255);
+  textSize(14);
+  text("Eventos registrados: " + gestor.getCantidad(), width/2, 130);
+  
+  // Mostrar nombre del archivo actual
+  textSize(12);
+  fill(150, 150, 255);
+  text("Archivo: " + gestor.getNombreArchivo(), width/2, 150);
+  
+  // Dibujar plazas
+  dibujarPlaza(150, 200, 1, plaza1Ocupada);
+  dibujarPlaza(370, 200, 2, plaza2Ocupada);
+  dibujarPlaza(590, 200, 3, plaza3Ocupada);
+  
+  // Dibujar botón
+  dibujarBotonBarrera();
+  
+  // Detectar cambios
+  detectarCambios();
+  
+  // Manejar barrera
+  if (barreraAbierta) {
+    if (millis() - tiempoBarrera > 5000) {
+      barreraAbierta = false;
+      enviarComando('C');
+    }
+  }
+  
+  // Leer datos del Arduino
+  if (puerto != null && puerto.available() > 0) {
+    leerDatosSerial();
+  }
+  
+  // Ayuda
+  fill(200);
+  textSize(12);
+  textAlign(LEFT);
+  text("Teclas: E=Exportar CSV | L=Listar eventos", 10, height - 10);
+  textAlign(CENTER);
+}
+
+// ========== DETECTAR CAMBIOS ==========
+void detectarCambios() {
+  if (plaza1Ocupada != plaza1Anterior) {
+    gestor.agregar(plaza1Ocupada ? "Entrada P1" : "Salida P1", plaza1Ocupada, plaza2Ocupada, plaza3Ocupada);
+    plaza1Anterior = plaza1Ocupada;
+  }
+  
+  if (plaza2Ocupada != plaza2Anterior) {
+    gestor.agregar(plaza2Ocupada ? "Entrada P2" : "Salida P2", plaza1Ocupada, plaza2Ocupada, plaza3Ocupada);
+    plaza2Anterior = plaza2Ocupada;
+  }
+  
+  if (plaza3Ocupada != plaza3Anterior) {
+    gestor.agregar(plaza3Ocupada ? "Entrada P3" : "Salida P3", plaza1Ocupada, plaza2Ocupada, plaza3Ocupada);
+    plaza3Anterior = plaza3Ocupada;
+  }
+  
+  if (barreraAbierta && !barreraAnterior) {
+    gestor.agregar("Barrera Manual", plaza1Ocupada, plaza2Ocupada, plaza3Ocupada);
+  }
+  barreraAnterior = barreraAbierta;
+}
+
+// ========== DIBUJAR PLAZA ==========
+void dibujarPlaza(int x, int y, int numero, boolean ocupada) {
+  pushMatrix();
+  translate(x, y);
+  
+  strokeWeight(3);
+  if (ocupada) {
+    fill(200, 50, 50);
+    stroke(255, 0, 0);
+  } else {
+    fill(50, 200, 50);
+    stroke(0, 255, 0);
+  }
+  rect(0, 0, 180, 250, 10);
+  
+  fill(255);
+  textSize(40);
+  text("P" + numero, 90, 50);
+  
+  if (ocupada) {
+    fill(100, 100, 150);
+    stroke(50);
+    strokeWeight(2);
+    rect(30, 80, 120, 140, 15);
+    fill(150, 200, 250);
+    rect(40, 90, 100, 50, 5);
+    fill(30);
+    ellipse(50, 210, 30, 30);
+    ellipse(130, 210, 30, 30);
+  } else {
+    fill(255);
+    textSize(28);
+    text("LIBRE", 90, 150);
+  }
+  
+  textSize(18);
+  if (ocupada) {
+    fill(255, 100, 100);
+    text("OCUPADO", 90, 230);
+  } else {
+    fill(100, 255, 100);
+    text("DISPONIBLE", 90, 230);
+  }
+  
+  popMatrix();
+}
+
+// ========== DIBUJAR BOTÓN ==========
+void dibujarBotonBarrera() {
+  boolean mouseEncima = mouseX > btnX && mouseX < btnX + btnAncho &&
+                        mouseY > btnY && mouseY < btnY + btnAlto;
+  
+  strokeWeight(3);
+  if (barreraAbierta) {
+    fill(100, 100, 100);
+    stroke(150);
+  } else if (mouseEncima) {
+    fill(100, 150, 255);
+    stroke(150, 200, 255);
+  } else {
+    fill(50, 100, 200);
+    stroke(100, 150, 255);
+  }
+  
+  rect(btnX, btnY, btnAncho, btnAlto, 10);
+  
+  fill(255);
+  textSize(24);
+  if (barreraAbierta) {
+    text("CERRANDO...", btnX + btnAncho/2, btnY + btnAlto/2);
+    int tiempoRestante = 5 - (millis() - tiempoBarrera) / 1000;
+    textSize(18);
+    text(tiempoRestante + "s", btnX + btnAncho/2, btnY + btnAlto + 25);
+  } else {
+    text("ABRIR BARRERA", btnX + btnAncho/2, btnY + btnAlto/2);
+  }
+  
+  int barreraX = 100;
+  int barreraY = 520;
+  
+  fill(255);
+  textSize(16);
+  textAlign(LEFT);
+  text("Estado Barrera:", barreraX, barreraY);
+  
+  stroke(100);
+  strokeWeight(8);
+  if (barreraAbierta) {
+    stroke(100, 255, 100);
+    line(barreraX + 150, barreraY - 20, barreraX + 150, barreraY - 60);
+    fill(100, 255, 100);
+    text("ABIERTA", barreraX + 180, barreraY);
+  } else {
+    stroke(255, 100, 100);
+    line(barreraX + 100, barreraY - 20, barreraX + 200, barreraY - 20);
+    fill(255, 100, 100);
+    text("CERRADA", barreraX + 180, barreraY);
+  }
+  
+  textAlign(CENTER);
+}
+
+// ========== MOUSE PRESSED ==========
+void mousePressed() {
+  if (mouseX > btnX && mouseX < btnX + btnAncho &&
+      mouseY > btnY && mouseY < btnY + btnAlto) {
+    if (!barreraAbierta) {
+      barreraAbierta = true;
+      tiempoBarrera = millis();
+      enviarComando('A');
+    }
+  }
+}
+
+// ========== LEER SERIAL ==========
+void leerDatosSerial() {
+  try {
+    datos = puerto.readStringUntil('\n');
+    if (datos != null) {
+      datos = trim(datos);
+      String[] partes = split(datos, ',');
+      
+      for (String parte : partes) {
+        if (parte.contains("P1:")) {
+          plaza1Ocupada = (parte.charAt(3) == '1');
+        } else if (parte.contains("P2:")) {
+          plaza2Ocupada = (parte.charAt(3) == '1');
+        } else if (parte.contains("P3:")) {
+          plaza3Ocupada = (parte.charAt(3) == '1');
+        }
+      }
+    }
+  } catch (Exception e) {
+    println("Error leyendo datos: " + e);
+  }
+}
+
+// ========== ENVIAR COMANDO ==========
+void enviarComando(char comando) {
+  if (puerto != null) {
+    puerto.write(comando);
+    println("Comando enviado: " + comando);
+  }
+}
+
+// ========== TECLAS ==========
+void keyPressed() {
+  if (key == 'e' || key == 'E') {
+    gestor.exportarCSV();
+  }
+  
+  if (key == 'l' || key == 'L') {
+    gestor.listar();
+  }
+}
+
+// ========== SALIR ==========
+void exit() {
+  gestor.guardar();
+  println("Archivo guardado. Total eventos: " + gestor.getCantidad());
+  super.exit();
+}
